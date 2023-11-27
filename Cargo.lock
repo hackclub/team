@@ -1092,6 +1092,7 @@ dependencies = [
 name = "team"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "rocket",
  "serde",
  "serde_json",

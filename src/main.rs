@@ -1,17 +1,19 @@
 #[macro_use]
 extern crate rocket;
+use parking_lot::RwLock;
 use rocket::{serde::json::Json, State};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct TeamMember {
     name: String,
+    bio: Option<String>,
     department: String,
     role: String,
-    bio: Option<String>,
-    bio_hf: Option<String>,
+    bio_hackfoundation: Option<String>,
     pronouns: String,
+    slack_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -24,26 +26,34 @@ impl Team {
         //TODO: Get from Airtable
 
         Self {
-            current: vec![],
+            current: vec![TeamMember {
+                name: "Aidan".to_owned(),
+                bio: None,
+                department: "Engineering".to_owned(),
+                role: "Software Engineer".to_owned(),
+                bio_hackfoundation: None,
+                pronouns: "he/him".to_owned(),
+                slack_id: None,
+            }],
             alumni: vec![],
         }
     }
 }
 
 #[get("/")]
-fn get_team(team: &State<Team>) -> Json<&Team> {
-    Json(team.inner())
+fn get_team(team: &State<RwLock<Team>>) -> Json<Team> {
+    Json(team.read().clone())
 }
 
-#[post("/update", format = "json", data = "<user_input>")]
-fn update_team(user_input: Json<Value>) -> String {
-    println!("{:?}", user_input);
-    format!("recv!")
+#[post("/", format = "json", data = "<input>")]
+fn update_team(team: &State<RwLock<Team>>, input: Json<Team>) -> Json<String> {
+    *team.write() = input.into_inner();
+    Json(String::from("success!"))
 }
 
 #[launch]
 fn rocket() -> _ {
     rocket::build()
         .mount("/", routes![get_team, update_team])
-        .manage(Team::fetch())
+        .manage(RwLock::new(Team::fetch()))
 }
