@@ -3,6 +3,7 @@ extern crate rocket;
 use parking_lot::RwLock;
 use rocket::{serde::json::Json, State};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::env::var;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -15,6 +16,19 @@ struct TeamMember {
     pronouns: String,
     slack_id: Option<String>,
 }
+impl TeamMember {
+    fn from_json(json: &Value) -> Self {
+        Self {
+            name: json["Name"].as_str().unwrap().into(),
+            bio: json["Bio"].as_str().map(|s| s.into()),
+            department: json["Department"].as_str().unwrap().into(),
+            role: json["Role"].as_str().unwrap().into(),
+            bio_hackfoundation: json["Bio (Hack Foundation)"].as_str().map(|s| s.into()),
+            pronouns: json["Pronouns"].as_str().unwrap().into(),
+            slack_id: json["Slack ID"].as_str().map(|s| s.into()),
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct Team {
@@ -22,9 +36,34 @@ struct Team {
     alumni: Vec<TeamMember>,
 }
 impl Team {
+    fn from_raw_airtable(input: Value) -> Self {
+        let current: Vec<TeamMember> = input
+            .get("current")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| TeamMember::from_json(r))
+            .collect();
+
+        // let alumni: Vec<TeamMember> = input
+        //     .get("alumni")
+        //     .unwrap()
+        //     .as_array()
+        //     .unwrap()
+        //     .iter()
+        //     .map(|r| TeamMember::from_json(r))
+        //     .collect();
+
+        Self {
+            current,
+            alumni: vec![],
+        }
+    }
+
     fn fetch() -> Self {
-        let app_id = var("APP_ID").expect("an airtable app ID");
-        let token = var("TOKEN").expect("an airtable token");
+        let app_id = var("AT_BASE_ID").expect("an airtable base ID");
+        let token = var("AT_TOKEN").expect("an airtable token");
 
         let res = reqwest::blocking::Client::new()
             .get(format!("https://api.airtable.com/v0/{app_id}/Current"))
@@ -34,21 +73,20 @@ impl Team {
             .text()
             .unwrap();
 
-        //TODO: Traverse and parse
-        println!("{}", res);
+        let res = serde_json::from_str::<Value>(&res).unwrap();
+        let res = res
+            .get("records")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r.get("fields").unwrap())
+            .collect::<Vec<_>>();
 
-        Self {
-            current: vec![TeamMember {
-                name: "Aidan".to_owned(),
-                bio: None,
-                department: "Engineering".to_owned(),
-                role: "Software Engineer".to_owned(),
-                bio_hackfoundation: None,
-                pronouns: "he/him".to_owned(),
-                slack_id: None,
-            }],
-            alumni: vec![],
-        }
+        // Convert to Value
+        let res = serde_json::to_value(res).unwrap();
+
+        Self::from_raw_airtable(json!({ "current": res, "alumni": [] }))
     }
 }
 
@@ -57,9 +95,13 @@ fn get_team(team: &State<RwLock<Team>>) -> Json<Team> {
     Json(team.read().clone())
 }
 
-#[post("/", format = "json", data = "<input>")]
-fn update_team(team: &State<RwLock<Team>>, input: Json<Team>) -> Json<String> {
-    *team.write() = input.into_inner();
+#[post("/?<token..>", format = "json", data = "<input>")]
+fn update_team(team: &State<RwLock<Team>>, input: Json<Value>, token: String) -> Json<String> {
+    if token != var("TEAM_SERVER_SECRET").expect("a token") {
+        return Json(String::from("invalid token"));
+    }
+
+    *team.write() = Team::from_raw_airtable(input.into_inner());
     Json(String::from("success!"))
 }
 
