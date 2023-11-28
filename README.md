@@ -17,7 +17,7 @@ const currentEmployees = currentEmployeeRecords.records
     .map((record) => {
         const final = {};
         for (const field of currentEmployeeTable.fields) {
-			if (field.type === "singleSelect") {
+            if (field.type === "singleSelect") {
                 final[field.name] = record.getCellValueAsString(field);
             } else {
                 final[field.name] = record.getCellValue(field);
