@@ -3,7 +3,7 @@ extern crate rocket;
 use parking_lot::RwLock;
 use rocket::{serde::json::Json, State};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use std::env::var;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct TeamMember {
@@ -23,7 +23,19 @@ struct Team {
 }
 impl Team {
     fn fetch() -> Self {
-        //TODO: Get from Airtable
+        let app_id = var("APP_ID").expect("an airtable app ID");
+        let token = var("TOKEN").expect("an airtable token");
+
+        let res = reqwest::blocking::Client::new()
+            .get(format!("https://api.airtable.com/v0/{app_id}/Current"))
+            .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
+            .send()
+            .unwrap()
+            .text()
+            .unwrap();
+
+        //TODO: Traverse and parse
+        println!("{}", res);
 
         Self {
             current: vec![TeamMember {
@@ -53,6 +65,8 @@ fn update_team(team: &State<RwLock<Team>>, input: Json<Team>) -> Json<String> {
 
 #[launch]
 fn rocket() -> _ {
+    dotenv::dotenv().ok();
+
     rocket::build()
         .mount("/", routes![get_team, update_team])
         .manage(RwLock::new(Team::fetch()))
