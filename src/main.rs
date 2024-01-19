@@ -130,6 +130,8 @@ impl Team {
                         .as_str()
                         .expect("a str");
 
+                    log::debug!("pulled Slack data for {slack_display_name}");
+
                     let r_obj = r.as_object_mut().unwrap();
                     r_obj.insert("_pronouns".into(), pronouns.to_owned());
                     r_obj.insert("_avatar".into(), avatar.into());
