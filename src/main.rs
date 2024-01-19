@@ -168,7 +168,12 @@ fn rocket() -> _ {
     dotenv::dotenv().ok();
     env_logger::init();
 
-    rocket::build()
+    let mut config = rocket::config::Config::release_default();
+    if !cfg!(debug_assertions) {
+        config.address = std::net::IpAddr::from([0, 0, 0, 0]);
+    }
+
+    rocket::custom(config)
         .mount("/", routes![get_team, update_team])
         .manage(RwLock::new(Team::fetch()))
 }
