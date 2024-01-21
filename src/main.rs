@@ -78,7 +78,9 @@ impl Team {
         let client = reqwest::blocking::Client::new();
 
         let res = client
-            .get(format!("https://api.airtable.com/v0/{app_id}/Current"))
+            .get(format!(
+                "https://api.airtable.com/v0/{app_id}/Current?view=Grid%20view"
+            ))
             .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
             .send()
             .unwrap()
@@ -153,13 +155,13 @@ fn get_team(team: &State<RwLock<Team>>) -> Json<Team> {
     Json(team.read().clone())
 }
 
-#[post("/?<token..>", format = "json", data = "<input>")]
-fn update_team(team: &State<RwLock<Team>>, input: Json<Value>, token: String) -> Json<String> {
+#[post("/?<token..>")]
+fn notify_team_change(team: &State<RwLock<Team>>, token: String) -> Json<String> {
     if token != var("TEAM_SERVER_SECRET").expect("a token") {
         return Json(String::from("invalid token"));
     }
 
-    *team.write() = Team::from_raw_airtable(input.into_inner());
+    *team.write() = Team::fetch();
     Json(String::from("success!"))
 }
 
@@ -174,6 +176,6 @@ fn rocket() -> _ {
     }
 
     rocket::custom(config)
-        .mount("/", routes![get_team, update_team])
+        .mount("/", routes![get_team, notify_team_change])
         .manage(RwLock::new(Team::fetch()))
 }
