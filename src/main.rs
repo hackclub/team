@@ -2,48 +2,11 @@
 extern crate rocket;
 use parking_lot::RwLock;
 use rocket::{serde::json::Json, State};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::env::var;
+mod defs;
+use defs::{Team, TeamMember};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct TeamMember {
-    name: String,
-    bio: Option<String>,
-    department: String,
-    role: String,
-    bio_hackfoundation: Option<String>,
-    pronouns: Option<String>,
-    slack_id: Option<String>,
-    avatar: Option<String>, // 72^2 px
-    slack_display_name: Option<String>,
-}
-impl TeamMember {
-    fn from_json(json: &Value) -> Self {
-        // Title Case names are from Airtable, _snake_case names are from Slack.
-        Self {
-            name: json["Name"].as_str().unwrap().into(),
-            bio: json["Bio"].as_str().map(|s| s.into()),
-            department: json["Department"].as_str().unwrap().into(),
-            role: json["Role"].as_str().unwrap().into(),
-            bio_hackfoundation: json["Bio (Hack Foundation)"].as_str().map(|s| s.into()),
-            pronouns: json
-                .get("_pronouns")
-                .and_then(|s| s.as_str().map(|s| s.to_string())),
-            slack_id: json["Slack ID"].as_str().map(|s| s.into()),
-            avatar: json.get("_avatar").map(|s| s.as_str().unwrap().to_string()),
-            slack_display_name: json
-                .get("_slack_display_name")
-                .map(|s| s.as_str().unwrap().to_string()),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct Team {
-    current: Vec<TeamMember>,
-    alumni: Vec<TeamMember>,
-}
 impl Team {
     fn from_raw_airtable(input: Value) -> Self {
         let current: Vec<TeamMember> = input
@@ -54,15 +17,6 @@ impl Team {
             .iter()
             .map(|r| TeamMember::from_json(r))
             .collect();
-
-        // let alumni: Vec<TeamMember> = input
-        //     .get("alumni")
-        //     .unwrap()
-        //     .as_array()
-        //     .unwrap()
-        //     .iter()
-        //     .map(|r| TeamMember::from_json(r))
-        //     .collect();
 
         Self {
             current,
