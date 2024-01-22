@@ -4,6 +4,7 @@ use parking_lot::RwLock;
 use rocket::{serde::json::Json, State};
 use serde_json::{json, Value};
 use std::env::var;
+use std::sync::Arc;
 mod defs;
 use defs::{Team, TeamMember};
 
@@ -129,7 +130,19 @@ fn rocket() -> _ {
         config.address = std::net::IpAddr::from([0, 0, 0, 0]);
     }
 
+    let team = Arc::new(RwLock::new(Team::fetch()));
+
+    let team_thread = team.clone();
+    std::thread::spawn(move || {
+        let sleep_duration = std::time::Duration::from_secs(10 * 60);
+        loop {
+            std::thread::sleep(sleep_duration);
+            log::debug!("Refetching team data");
+            *team_thread.write() = Team::fetch();
+        }
+    });
+
     rocket::custom(config)
         .mount("/", routes![get_team, notify_team_change])
-        .manage(RwLock::new(Team::fetch()))
+        .manage(team)
 }
