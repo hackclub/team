@@ -42,6 +42,7 @@ impl TeamMember {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Team {
+    pub refreshed_at: u64,
     pub current: Vec<TeamMember>,
     pub alumni: Vec<TeamMember>,
 }

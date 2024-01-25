@@ -9,7 +9,7 @@ mod defs;
 use defs::{Team, TeamMember};
 
 impl Team {
-    fn from_raw_airtable(input: Value) -> Self {
+    fn from_raw_airtable(refreshed_at: u64, input: Value) -> Self {
         let current: Vec<TeamMember> = input
             .get("current")
             .unwrap()
@@ -20,6 +20,8 @@ impl Team {
             .collect();
 
         Self {
+            refreshed_at,
+
             current,
             alumni: vec![],
         }
@@ -101,17 +103,22 @@ impl Team {
 
         let res = serde_json::to_value(res).unwrap();
 
-        Self::from_raw_airtable(json!({ "current": res, "alumni": [] }))
+        let refreshed_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs();
+
+        Self::from_raw_airtable(refreshed_at, json!({ "current": res, "alumni": [] }))
     }
 }
 
 #[get("/")]
-fn get_team(team: &State<RwLock<Team>>) -> Json<Team> {
+fn get_team(team: &State<Arc<RwLock<Team>>>) -> Json<Team> {
     Json(team.read().clone())
 }
 
 #[post("/?<token..>")]
-fn notify_team_change(team: &State<RwLock<Team>>, token: String) -> Json<String> {
+fn notify_team_change(team: &State<Arc<RwLock<Team>>>, token: String) -> Json<String> {
     if token != var("TEAM_SERVER_SECRET").expect("a token") {
         return Json(String::from("invalid token"));
     }
