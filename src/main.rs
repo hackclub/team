@@ -52,66 +52,67 @@ impl Team {
         let res = res.unwrap();
 
         let mut res = serde_json::from_str::<Value>(&res).unwrap();
-        let res = res
+        let mut res = res
             .get_mut("records")
             .expect("records")
             .as_array_mut()
             .expect("an array of records")
             .iter_mut()
             .map(|r| r.get_mut("fields").expect("fields"))
-            .map(|r| {
-                if let Some(slack_id) = r.get("Slack ID") {
-                    let slack_id = slack_id.as_str().unwrap();
+            .collect::<Vec<_>>();
 
-                    let slack_user_response = client
-                        .get(format!("https://slack.com/api/users.info?user={slack_id}"))
-                        .header("Authorization", format!("Bearer {}", slack_token))
-                        .send();
+        for r in res.iter_mut() {
+            if let Some(slack_id) = r.get("Slack ID") {
+                let slack_id = slack_id.as_str().unwrap();
 
-                    if let Err(ref err) = slack_user_response {
-                        return Err(TeamFetchError::new(format!(
-                            "could not make a request to the slack web api: {err}"
-                        )));
-                    }
+                let slack_user_response = client
+                    .get(format!("https://slack.com/api/users.info?user={slack_id}"))
+                    .header("Authorization", format!("Bearer {}", slack_token))
+                    .send();
 
-                    let slack_user_response = slack_user_response.unwrap().json::<Value>();
-
-                    if let Some(err) = slack_user_response.get("error") {
-                        log::error!("slack web api error for slack id {slack_id}: {err}");
-                        return r;
-                    }
-
-                    let profile = slack_user_response
-                        .get("user")
-                        .expect("a user")
-                        .get("profile")
-                        .expect("a profile");
-
-                    let pronouns = profile.get("pronouns").unwrap_or(&Value::Null);
-
-                    let avatar = profile
-                        .get("image_72")
-                        .expect("an avatar")
-                        .as_str()
-                        .expect("a str");
-
-                    let slack_display_name = profile
-                        .get("display_name")
-                        .expect("a display name")
-                        .as_str()
-                        .expect("a str");
-
-                    log::trace!("pulled Slack data for {slack_display_name}");
-
-                    let r_obj = r.as_object_mut().unwrap();
-                    r_obj.insert("_pronouns".into(), pronouns.to_owned());
-                    r_obj.insert("_avatar".into(), avatar.into());
-                    r_obj.insert("_slack_display_name".into(), slack_display_name.into());
+                if let Err(ref err) = slack_user_response {
+                    return Err(TeamFetchError::new(format!(
+                        "could not make a request to the slack web api: {err}"
+                    )));
                 }
 
-                r
-            })
-            .collect::<Vec<_>>();
+                let slack_user_response = slack_user_response.unwrap().json::<Value>().unwrap();
+
+                if let Some(err) = slack_user_response.get("error") {
+                    log::error!("slack web api error for slack id {slack_id}: {err}");
+                    return Err(TeamFetchError::new(format!(
+                        "there was an error in the slack api response: {err}"
+                    )));
+                }
+
+                let profile = slack_user_response
+                    .get("user")
+                    .expect("a user")
+                    .get("profile")
+                    .expect("a profile");
+
+                let pronouns = profile.get("pronouns").unwrap_or(&Value::Null);
+
+                let avatar = profile
+                    .get("image_72")
+                    .expect("an avatar")
+                    .as_str()
+                    .expect("a str");
+
+                let slack_display_name = profile
+                    .get("display_name")
+                    .expect("a display name")
+                    .as_str()
+                    .expect("a str");
+
+                log::trace!("pulled Slack data for {slack_display_name}");
+
+                let r_obj = r.as_object_mut().unwrap();
+                r_obj.insert("_pronouns".into(), pronouns.to_owned());
+                r_obj.insert("_avatar".into(), avatar.into());
+                r_obj.insert("_slack_display_name".into(), slack_display_name.into());
+            }
+        }
 
         let res = serde_json::to_value(res).unwrap();
 
@@ -157,8 +158,16 @@ fn rocket() -> _ {
         config.address = std::net::IpAddr::from([0, 0, 0, 0]);
     }
 
-    let team = Arc::new(RwLock::new(Team::fetch()));
-    log::info!("finished fetching team data");
+    let team = match Team::fetch() {
+        Ok(t) => {
+            log::info!("finished fetching team data");
+            Arc::new(RwLock::new(t))
+        }
+        Err(err) => {
+            log::error!("failed to fetch team data on startup: {err}");
+            std::process::exit(1);
+        }
+    };
 
     let team_thread = team.clone();
     std::thread::spawn(move || {
@@ -166,9 +175,22 @@ fn rocket() -> _ {
         loop {
             std::thread::sleep(sleep_duration);
             log::debug!("Refetching team data");
-            *team_thread.write() = Team::fetch();
+            match Team::fetch() {
+                Ok(t) => {
+                    *team_thread.write() = t;
+                }
+                Err(err) => {
+                    log::error!("failed to refetch team data: {err}");
+                }
+            }
         }
     });
+
+    log::info!(
+        "starting rocket server on {}:{}",
+        config.address,
+        config.port
+    );
 
     rocket::custom(config)
         .mount("/", routes![get_team, notify_team_change])
