@@ -42,7 +42,27 @@ impl TeamMember {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Team {
+    pub version: &'static str,
     pub refreshed_at: u64,
     pub current: Vec<TeamMember>,
     pub alumni: Vec<TeamMember>,
 }
+
+#[derive(Debug)]
+pub struct TeamFetchError {
+    message: String,
+}
+impl TeamFetchError {
+    pub fn new(message: String) -> Self {
+        Self { message }
+    }
+    pub fn log(&self) {
+        log::error!("{}", self.message);
+    }
+}
+impl std::fmt::Display for TeamFetchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "TeamFetchError: {}", self.message)
+    }
+}
+impl std::error::Error for TeamFetchError {}
