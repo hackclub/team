@@ -66,7 +66,9 @@ impl Team {
                 let slack_id = slack_id.as_str().unwrap();
 
                 let slack_user_response = client
-                    .get(format!("https://slack.com/api/users.info?user={slack_id}"))
+                    .get(format!(
+                        "https://slack.com/api/users.profile.get?user={slack_id}"
+                    ))
                     .header("Authorization", format!("Bearer {}", slack_token))
                     .send();
 
@@ -85,19 +87,17 @@ impl Team {
                     )));
                 }
 
-                let profile = slack_user_response
-                    .get("user")
-                    .expect("a user")
-                    .get("profile")
-                    .expect("a profile");
+                let profile = slack_user_response.get("profile").expect("a profile");
 
                 let pronouns = profile.get("pronouns").unwrap_or(&Value::Null);
 
-                let avatar = profile
-                    .get("image_72")
-                    .expect("an avatar")
+                let avatar_hash = profile
+                    .get("avatar_hash")
+                    .expect("an avatar hash")
                     .as_str()
                     .expect("a str");
+                let avatar =
+                    format!("https://ca.slack-edge.com/T0266FRGM-{slack_id}-{avatar_hash}-128");
 
                 let slack_display_name = profile
                     .get("display_name")
@@ -105,7 +105,8 @@ impl Team {
                     .as_str()
                     .expect("a str");
 
-                log::trace!("pulled Slack data for {slack_display_name}");
+                log::trace!("{:?}", profile);
+                log::debug!("pulled Slack data for {slack_display_name}");
 
                 let r_obj = r.as_object_mut().unwrap();
                 r_obj.insert("_pronouns".into(), pronouns.to_owned());
