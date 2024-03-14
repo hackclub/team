@@ -7,6 +7,7 @@ use std::env::var;
 use std::sync::Arc;
 mod defs;
 use defs::{Team, TeamFetchError, TeamMember};
+mod slack;
 
 impl Team {
     fn from_raw_airtable(refreshed_at: u64, input: Value) -> Self {
@@ -142,6 +143,54 @@ fn notify_team_change(team: &State<Arc<RwLock<Team>>>, token: String) -> Json<St
 
     match Team::fetch() {
         Ok(t) => {
+            let current_team = team.read();
+
+            for current_member in (*current_team.current).iter() {
+                if let Some(other_member) = t.current.iter().find(|m| m.name == current_member.name)
+                {
+                    let changed_fields = current_member.differences(other_member);
+                    if !changed_fields.is_empty() {
+                        if let Some(ref sid) = current_member.slack_id {
+                            if slack::send_slack_message(
+                                sid,
+                                &format!(
+                                    "The following fields have changed for you: {}",
+                                    changed_fields.join(", ")
+                                ),
+                            )
+                            .is_err()
+                            {
+                                log::error!(
+                                    "failed to send row change slack notification to {}",
+                                    current_member.name
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            // for changed_member in team.read().changed_members(&t) {
+            //     if let Some(ref sid) = changed_member.slack_id {
+            //         let other_member = other
+            //             .current
+            //             .iter()
+            //             .find(|m| m.name == changed_member.name)
+            //             .unwrap_or_else(|| {
+            //                 log::warn!("Member {} not found in other team", member.name);
+            //                 member
+            //             });
+
+            //         let changed = changed_member.clone().differences(t);
+            //         if slack::send_slack_message(sid, "test1").is_err() {
+            //             log::error!(
+            //                 "failed to send row change slack notification to {}",
+            //                 changed_member.name
+            //             );
+            //         }
+            //     }
+            // }
+
             *team.write() = t;
             Json(String::from("success!"))
         }
