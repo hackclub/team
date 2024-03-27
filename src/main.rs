@@ -143,7 +143,7 @@ fn notify_team_change(team: &State<Arc<RwLock<Team>>>, token: String) -> Json<St
 
     match Team::fetch() {
         Ok(t) => {
-            let current_team = team.read();
+            // let current_team = team.read();
 
             // for current_member in (*current_team.current).iter() {
             //     if let Some(other_member) = t.current.iter().find(|m| m.name == current_member.name)
