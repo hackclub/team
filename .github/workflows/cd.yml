@@ -1,8 +1,6 @@
 name: Continuous delivery
 
 on:
-  schedule:
-    - cron: '41 12 * * *'
   push:
     branches: [ "main" ]
     # Publish semver tags as releases.
